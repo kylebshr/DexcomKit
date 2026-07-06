@@ -93,6 +93,38 @@ import Testing
         #expect(central.calls(matching: .scanForSensors) == 2)
     }
 
+    @Test func staysWaitingForReadingAcrossRescanDuringHealthySession() async throws {
+        let central = MockCentral()
+        let engine = makeEngine(central: central) { _ in }
+        var iterator = await engine.eventStream().makeAsyncIterator()
+        let peripheral = MockPeripheral(name: "DXCM8T")
+        central.knownPeripherals[peripheral.identifier] = peripheral
+        await driveToConnected(
+            central: central, engine: engine, peripheral: peripheral, iterator: &iterator)
+
+        // A reading adopts the sensor: the session is now followed and live.
+        central.emit(
+            .value(peripheral.identifier, characteristic: .control, data: G7Fixtures.glucose))
+        #expect(await nextReading(&iterator) != nil)
+
+        central.emit(.disconnected(peripheral.identifier, isRemoteInitiated: true))
+        #expect(await nextConnectionState(&iterator) == .waitingForReading)
+
+        // The rescan re-arms the radio but must not surface as a state
+        // change — no emission to await, so poll for the second scan call.
+        while central.calls(matching: .scanForSensors) < 2 {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+
+        // The rescan issued a pending connect to the known peripheral, which
+        // completes at the sensor's next advertisement. The next state a
+        // consumer sees is that reconnect; a .scanning emission in between
+        // would surface here instead and fail.
+        #expect(central.calls(matching: .connect(peripheral.identifier)) == 2)
+        central.emit(.connected(peripheral.identifier))
+        #expect(await nextConnectionState(&iterator) == .connecting)
+    }
+
     @Test func stopDuringRescanWindowGoesIdle() async throws {
         let central = MockCentral()
         // A long sleep keeps the rescan pending while stop() runs.
@@ -123,7 +155,8 @@ import Testing
 
         await engine.start()
         central.emit(.stateChanged(.poweredOn))
-        #expect(await nextConnectionState(&iterator) == .scanning)
+        // Following a live session, so the resting state is waitingForReading.
+        #expect(await nextConnectionState(&iterator) == .waitingForReading)
 
         for attempt in 1...G7SessionEngine.maxAuthStrikes {
             let outcome = await driveAuthPendingDisconnect(
@@ -131,7 +164,6 @@ import Testing
 
             if attempt < G7SessionEngine.maxAuthStrikes {
                 #expect(outcome == .connectionStateChanged(.waitingForReading))
-                #expect(await nextConnectionState(&iterator) == .scanning)
             } else {
                 #expect(outcome == .sessionEnded(.suspectedEnd))
             }
@@ -147,14 +179,14 @@ import Testing
 
         await engine.start()
         central.emit(.stateChanged(.poweredOn))
-        #expect(await nextConnectionState(&iterator) == .scanning)
+        // Following a live session, so the resting state is waitingForReading.
+        #expect(await nextConnectionState(&iterator) == .waitingForReading)
 
         // Two strikes…
         for _ in 1...2 {
             let outcome = await driveAuthPendingDisconnect(
                 central: central, peripheral: peripheral, iterator: &iterator)
             #expect(outcome == .connectionStateChanged(.waitingForReading))
-            #expect(await nextConnectionState(&iterator) == .scanning)
         }
 
         // …then a successful authentication resets the count…
@@ -168,7 +200,6 @@ import Testing
         #expect(await nextConnectionState(&iterator) == .connected)
         central.emit(.disconnected(peripheral.identifier, isRemoteInitiated: true))
         #expect(await nextConnectionState(&iterator) == .waitingForReading)
-        #expect(await nextConnectionState(&iterator) == .scanning)
 
         // …so the NEXT auth-pending disconnect is strike 1 of 3, not 3 of 3.
         let outcome = await driveAuthPendingDisconnect(
@@ -185,7 +216,8 @@ import Testing
 
         await engine.start()
         central.emit(.stateChanged(.poweredOn))
-        #expect(await nextConnectionState(&iterator) == .scanning)
+        // Following a live session, so the resting state is waitingForReading.
+        #expect(await nextConnectionState(&iterator) == .waitingForReading)
 
         // Local cancels during authentication, one more than the strike
         // limit — none may end the session.
@@ -203,7 +235,6 @@ import Testing
                 }
             }
             #expect(outcome == .connectionStateChanged(.waitingForReading))
-            #expect(await nextConnectionState(&iterator) == .scanning)
         }
     }
 

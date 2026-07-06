@@ -229,7 +229,16 @@ actor G7SessionEngine {
 
         Log.discovery.info("Scanning for sensors")
         central.scanForSensors()
-        await setState(.scanning)
+        // While following a live session the scan is just re-arming the
+        // radio for the sensor's next ~5-minute advertisement — the session
+        // is still healthy, so the public state stays `waitingForReading`.
+        // `scanning` is reserved for genuinely hunting: no followed sensor
+        // yet, or its session has ended and a replacement may appear.
+        if followedSensor != nil, !sessionEndReported {
+            await setState(.waitingForReading)
+        } else {
+            await setState(.scanning)
+        }
     }
 
     private func handleDiscovery(
