@@ -3,7 +3,7 @@ import Foundation
 /// The identity of the sensor being followed, persisted through the
 /// configured ``DexcomKitStore`` once a sensor is adopted.
 struct FollowedSensor: Sendable, Hashable, Codable {
-    static let storageKey = "com.dexcomkit.followedSensor"
+    static let storageKey = "com.kylebashour.DexcomKit.followedSensor"
 
     /// The advertised name (e.g. `DXCM8T`).
     var name: String

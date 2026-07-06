@@ -10,7 +10,7 @@ import os
 /// the stream continuation is guarded by `lock`. Payloads are copied into
 /// value types before they leave the queue.
 final class CoreBluetoothCentral: CentralManaging, @unchecked Sendable {
-    private let queue = DispatchQueue(label: "com.kylebshr.DexcomKit.bluetooth")
+    private let queue = DispatchQueue(label: "com.kylebashour.DexcomKit.bluetooth")
     private let proxy = DelegateProxy()
     private let restoreIdentifier: String?
 

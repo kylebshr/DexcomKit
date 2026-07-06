@@ -4,7 +4,7 @@ Inspect what DexcomKit is doing using the unified logging system.
 
 ## Log structure
 
-Everything is logged under the subsystem `com.kylebshr.DexcomKit`, split into
+Everything is logged under the subsystem `com.kylebashour.DexcomKit`, split into
 categories:
 
 | Category | Contents |
@@ -25,7 +25,7 @@ failures.
 Stream logs from a connected device:
 
 ```
-log stream --predicate 'subsystem == "com.kylebshr.DexcomKit"' --level debug
+log stream --predicate 'subsystem == "com.kylebashour.DexcomKit"' --level debug
 ```
 
 Or filter in Console.app by subsystem. To collect a window of history from
@@ -71,7 +71,7 @@ let store = try OSLogStore(scope: .currentProcessIdentifier)
 let position = store.position(date: .now.addingTimeInterval(-3600))
 let entries = try store.getEntries(at: position)
     .compactMap { $0 as? OSLogEntryLog }
-    .filter { $0.subsystem == "com.kylebshr.DexcomKit" }
+    .filter { $0.subsystem == "com.kylebashour.DexcomKit" }
 ```
 
 ## Instruments

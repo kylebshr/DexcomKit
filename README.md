@@ -90,10 +90,10 @@ last two characters of the pairing code) to target a specific sensor.
 ## Logging
 
 Everything DexcomKit does is visible in the unified log under the subsystem
-`com.kylebshr.DexcomKit`:
+`com.kylebashour.DexcomKit`:
 
 ```
-log stream --predicate 'subsystem == "com.kylebshr.DexcomKit"' --level debug
+log stream --predicate 'subsystem == "com.kylebashour.DexcomKit"' --level debug
 ```
 
 Glucose values and sensor identifiers are `.private` by default; operational

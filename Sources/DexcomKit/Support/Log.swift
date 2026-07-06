@@ -4,14 +4,14 @@ import os
 ///
 /// Inspect live behavior with:
 /// ```
-/// log stream --predicate 'subsystem == "com.kylebshr.DexcomKit"'
+/// log stream --predicate 'subsystem == "com.kylebashour.DexcomKit"'
 /// ```
 /// Privacy policy: operational data (states, opcodes, byte counts, timings)
 /// is public; glucose values, trend rates, sensor names, and peripheral
 /// identifiers are private, because sensor names embed the pairing code and
 /// readings are health data.
 enum Log {
-    static let subsystem = "com.kylebshr.DexcomKit"
+    static let subsystem = "com.kylebashour.DexcomKit"
 
     /// Central state, connects, disconnects, rescan scheduling.
     static let connection = Logger(subsystem: subsystem, category: "connection")
