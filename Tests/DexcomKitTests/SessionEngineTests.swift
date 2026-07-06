@@ -306,7 +306,8 @@ import Testing
         #expect(resumed?.sensorName == "DXCM8T")
 
         central.emit(.stateChanged(.poweredOn))
-        #expect(await nextConnectionState(&iterator) == .scanning)
+        // Following a live session, so the resting state is waitingForReading.
+        #expect(await nextConnectionState(&iterator) == .waitingForReading)
         #expect(central.calls.contains(.retrieveKnownPeripheral(followedID)))
 
         let stranger = MockPeripheral(name: "DXCM9Q")
@@ -334,7 +335,8 @@ import Testing
 
         await engine.start()
         central.emit(.stateChanged(.poweredOn))
-        #expect(await nextConnectionState(&iterator) == .scanning)
+        // Following a live session, so the resting state is waitingForReading.
+        #expect(await nextConnectionState(&iterator) == .waitingForReading)
 
         #expect(central.calls(matching: .connect(peripheral.identifier)) == 1)
 

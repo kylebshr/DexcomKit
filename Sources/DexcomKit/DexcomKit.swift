@@ -3,5 +3,5 @@
 /// streams glucose readings and connection state to any number of consumers.
 public enum DexcomKitInfo {
     /// The current version of the package.
-    public static let version = "0.0.1"
+    public static let version = "0.1.0"
 }

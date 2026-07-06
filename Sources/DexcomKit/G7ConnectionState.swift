@@ -10,7 +10,8 @@ public enum G7ConnectionState: Sendable, Hashable {
     /// Bluetooth can't be used right now.
     case bluetoothUnavailable(BluetoothUnavailableReason)
 
-    /// Scanning for the sensor's next advertisement.
+    /// Searching for a sensor to follow — none is followed yet, or the
+    /// followed session has ended and a replacement may appear.
     case scanning
 
     /// A connection to the sensor is being established.
@@ -23,8 +24,10 @@ public enum G7ConnectionState: Sendable, Hashable {
     /// Connected and subscribed; readings arrive on this connection.
     case connected
 
-    /// The sensor delivered its data and disconnected itself; a rescan is
-    /// scheduled for the next reading.
+    /// Between connections of a live session: the sensor disconnected
+    /// itself after delivering data, and the monitor is listening for its
+    /// next ~5-minute advertisement. The state holds here until the sensor
+    /// reconnects, even while the radio rescans underneath.
     case waitingForReading
 }
 

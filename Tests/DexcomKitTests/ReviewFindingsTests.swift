@@ -262,7 +262,8 @@ import Testing
 
         await engine.start()
         central.emit(.stateChanged(.poweredOn))
-        #expect(await nextConnectionState(&iterator) == .scanning)
+        // Following a live session, so the resting state is waitingForReading.
+        #expect(await nextConnectionState(&iterator) == .waitingForReading)
 
         let rejection = Data([0x05, 0x00, 0x00])
         for connection in 1...2 {
@@ -300,7 +301,6 @@ import Testing
                 "rejection on connection \(connection) was not reported")
             if next != .error(.authenticationRejected) { break }
             #expect(await nextConnectionState(&iterator) == .waitingForReading)
-            #expect(await nextConnectionState(&iterator) == .scanning)
         }
     }
 
@@ -327,9 +327,10 @@ import Testing
         #expect(peripheral.calls(matching: .write(ExtendedVersionMessage.request, .control)) == 1)
 
         // Sensor hangs up without answering; next connection, next reading.
+        // (The sensor was adopted by the first reading, so the state rests
+        // in waitingForReading across the rescan.)
         central.emit(.disconnected(peripheral.identifier, isRemoteInitiated: true))
         #expect(await nextConnectionState(&iterator) == .waitingForReading)
-        #expect(await nextConnectionState(&iterator) == .scanning)
         await connect(central: central, peripheral: peripheral, iterator: &iterator)
         central.emit(
             .value(
