@@ -1,6 +1,6 @@
 /// Everything the monitor reports, delivered in order on each consumer's
 /// event stream.
-public enum G7Event: Sendable {
+public enum G7Event: Sendable, Equatable {
     /// The connection state changed.
     case connectionStateChanged(G7ConnectionState)
 
