@@ -250,7 +250,9 @@ final class CoreBluetoothCentral: CentralManaging, @unchecked Sendable {
         // engine restart) can't finish-and-swap the continuation between
         // the read and the yield, silently dropping the event.
         lock.withLock {
-            continuation?.yield(event)
+            // Explicit discard: yield's @discardableResult doesn't propagate
+            // through withLock's generic return.
+            _ = continuation?.yield(event)
         }
     }
 }
