@@ -268,7 +268,21 @@ import Testing
         for connection in 1...2 {
             central.emit(.connected(peripheral.identifier))
             central.emit(.servicesReady(peripheral.identifier, success: true))
-            #expect(await nextConnectionState(&iterator) == .authenticating)
+            // A completed pending connect reports .connecting before service
+            // discovery finishes.
+            let next = await nextEvent(&iterator) { event -> G7ConnectionState? in
+                if case .connectionStateChanged(let state) = event,
+                    state == .connecting || state == .authenticating
+                {
+                    return state
+                }
+                return nil
+            }
+            if next == .connecting {
+                #expect(await nextConnectionState(&iterator) == .authenticating)
+            } else {
+                #expect(next == .authenticating)
+            }
             central.emit(
                 .value(peripheral.identifier, characteristic: .authentication, data: rejection))
             central.emit(.disconnected(peripheral.identifier, isRemoteInitiated: true))
@@ -353,6 +367,13 @@ import Testing
             .value(
                 peripheral: old, characteristic: .backfill,
                 data: backfillRecordBytes(timestamp: 299_400)))
+        // A direct actor call can jump ahead of queued stream events; a
+        // synchronizing reading guarantees the backfill chunk was buffered
+        // before the forget runs.
+        central.emit(
+            .value(peripheral: old, characteristic: .control, data: glucoseBytes(timestamp: 300_300))
+        )
+        #expect(await nextReading(&iterator) != nil)
         await engine.forgetSensor()
         #expect(await nextConnectionState(&iterator) == .scanning)
 
@@ -379,6 +400,105 @@ import Testing
         #expect(
             next == .sessionEnded(.stopped),
             "the forgotten sensor's backfill leaked into the new session")
+    }
+
+    // MARK: - Finding: session end doesn't survive a relaunch
+
+    /// A session that ended before a relaunch must stay ended: no repeated
+    /// sessionEnded announcement, no pinning the dead sensor via the fast
+    /// path, and a replacement sensor must be adoptable immediately.
+    @Test func sessionEndPersistsAcrossRestart() async throws {
+        let store = InMemoryStore()
+        let old = MockPeripheral(name: "DXCM8T")
+
+        // First run: adopt DXCM8T and let its session expire.
+        do {
+            let (central, _, engine) = makeHarness(store: store)
+            var iterator = await engine.eventStream().makeAsyncIterator()
+            await engine.start()
+            central.emit(.stateChanged(.poweredOn))
+            #expect(await nextConnectionState(&iterator) == .scanning)
+            await connect(central: central, peripheral: old, iterator: &iterator)
+            central.emit(
+                .value(
+                    peripheral: old, characteristic: .control,
+                    data: glucoseBytes(
+                        timestamp: 300_000, state: AlgorithmState.State.expired.rawValue)))
+            let end = await nextEvent(&iterator) {
+                if case .sessionEnded(let reason) = $0 { reason } else { nil }
+            }
+            #expect(end == .expired)
+            await engine.stop()
+        }
+
+        // Second run against the same store.
+        let (central, _, engine) = makeHarness(store: store)
+        central.knownPeripherals[old.identifier] = old
+        var iterator = await engine.eventStream().makeAsyncIterator()
+        await engine.start()
+        central.emit(.stateChanged(.poweredOn))
+
+        // No re-announced session end; straight to scanning.
+        let next = await nextEvent(&iterator) { event -> G7Event? in
+            switch event {
+            case .sessionEnded, .connectionStateChanged(.scanning): event
+            default: nil
+            }
+        }
+        #expect(next == .connectionStateChanged(.scanning))
+        // The dead sensor isn't pinned via the fast path…
+        #expect(central.calls(matching: .retrieveKnownPeripheral(old.identifier)) == 0)
+        // …so the replacement's advertisement wins.
+        let replacement = MockPeripheral(name: "DXCM9Q")
+        central.emit(.discovered(peripheral: replacement, name: "DXCM9Q", rssi: -55))
+        let adopted = try await poll {
+            central.calls(matching: .connect(replacement.identifier)) == 1
+        }
+        #expect(adopted)
+    }
+
+    // MARK: - Finding: extended-version session parameters don't survive a
+    // relaunch
+
+    /// A 15-day sensor's reported session length must not revert to the
+    /// 10-day default after the app relaunches.
+    @Test func extendedVersionPersistsAcrossRestart() async throws {
+        let store = InMemoryStore()
+        let peripheral = MockPeripheral(name: "DXCM8T")
+        let activation = fixedNow.addingTimeInterval(-300_000)
+
+        do {
+            let (central, _, engine) = makeHarness(store: store)
+            var iterator = await engine.eventStream().makeAsyncIterator()
+            await engine.start()
+            central.emit(.stateChanged(.poweredOn))
+            #expect(await nextConnectionState(&iterator) == .scanning)
+            await connect(central: central, peripheral: peripheral, iterator: &iterator)
+            central.emit(
+                .value(
+                    peripheral: peripheral, characteristic: .control,
+                    data: glucoseBytes(timestamp: 300_000)))
+            #expect(await nextReading(&iterator) != nil)
+            central.emit(
+                .value(
+                    peripheral: peripheral, characteristic: .control,
+                    data: G7Fixtures.extendedVersion15Day))
+            let refined = await nextEvent(&iterator) {
+                if case .sessionEstablished(let session) = $0 { session } else { nil }
+            }
+            #expect(refined?.expirationDate == activation.addingTimeInterval(1_296_000))
+            await engine.stop()
+        }
+
+        let (_, _, engine) = makeHarness(store: store)
+        var iterator = await engine.eventStream().makeAsyncIterator()
+        await engine.start()
+        let resumed = await nextEvent(&iterator) {
+            if case .sessionEstablished(let session) = $0 { session } else { nil }
+        }
+        #expect(resumed?.warmupEndDate == activation.addingTimeInterval(1620))
+        #expect(resumed?.expirationDate == activation.addingTimeInterval(1_296_000))
+        #expect(resumed?.gracePeriodEndDate == activation.addingTimeInterval(1_339_200))
     }
 
     // MARK: - Finding: failed notify subscription leaves a silent dead

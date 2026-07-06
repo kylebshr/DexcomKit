@@ -4,7 +4,7 @@ import Testing
 
 @Suite struct AdoptionPolicyTests {
     @Test func automaticAdoptsAnyG7FamilySensor() {
-        for name in ["DXCM8T", "DX01AB", "DX02CD"] {
+        for name in ["DXCM8T", "DX02CD"] {
             #expect(
                 AdoptionPolicy.shouldConnect(
                     advertisedName: name, selection: .automatic,
@@ -13,7 +13,8 @@ import Testing
     }
 
     @Test func rejectsNonG7Names() {
-        for name in ["Flex", "dxcm8T", "XDXCM8T", ""] {
+        // DX01 (original Dexcom One) speaks the G6 protocol, not this one.
+        for name in ["Flex", "dxcm8T", "XDXCM8T", "DX01AB", ""] {
             #expect(
                 !AdoptionPolicy.shouldConnect(
                     advertisedName: name, selection: .automatic,

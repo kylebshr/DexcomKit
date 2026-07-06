@@ -13,14 +13,15 @@ enum G7Fixtures {
     /// state ok (6), no flags, trend +0.1 mg/dL/min.
     static let backfillRecord = Data(hex: "B49204 00 7800 06 00 01")
 
-    /// Extended version response for a 10-day sensor:
-    /// session 864 000 s, warmup 1620 s, algorithm version 0x00010203,
+    /// Extended version response for a 10-day sensor. The reported session
+    /// length includes the grace period: 907 200 s = 10.5 days, matching
+    /// real device captures. Warmup 1620 s, algorithm version 0x00010203,
     /// hardware version 1, max lifetime 12 days.
-    static let extendedVersion10Day = Data(hex: "52 00 002F0D00 5406 03020100 01 0C00")
+    static let extendedVersion10Day = Data(hex: "52 00 C0D70D00 5406 03020100 01 0C00")
 
-    /// Extended version response for a 15-day sensor: session 1 296 000 s,
-    /// max lifetime 17 days.
-    static let extendedVersion15Day = Data(hex: "52 00 80C61300 5406 03020100 01 1100")
+    /// Extended version response for a 15-day sensor: session 1 339 200 s
+    /// (15.5 days including grace), max lifetime 17 days.
+    static let extendedVersion15Day = Data(hex: "52 00 406F1400 5406 03020100 01 1100")
 
     /// Auth status: authenticated and bonded.
     static let authOK = Data(hex: "050101")

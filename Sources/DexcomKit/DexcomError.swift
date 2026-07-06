@@ -6,12 +6,12 @@ public enum DexcomError: Error, Sendable, Hashable {
     /// The configuration is invalid; the associated value explains why.
     case invalidConfiguration(String)
 
-    /// A connection attempt didn't complete before the sensor's connection
-    /// window closed.
-    case connectionTimeout
-
     /// The sensor's CGM service or characteristics couldn't be discovered.
     case serviceDiscoveryFailed
+
+    /// Enabling notifications on a required characteristic failed; the
+    /// connection was abandoned and a rescan scheduled.
+    case subscriptionFailed
 
     /// The sensor reported that no authenticated, bonded session exists.
     /// DexcomKit requires the official Dexcom app (or receiver) to have
@@ -24,10 +24,10 @@ extension DexcomError: LocalizedError {
         switch self {
         case .invalidConfiguration(let reason):
             "Invalid configuration: \(reason)"
-        case .connectionTimeout:
-            "The connection attempt timed out before the sensor's connection window closed."
         case .serviceDiscoveryFailed:
             "The sensor's CGM service could not be discovered."
+        case .subscriptionFailed:
+            "Subscribing to a required sensor characteristic failed."
         case .authenticationRejected:
             "The sensor has no authenticated session. Pair it with the official Dexcom app first."
         }

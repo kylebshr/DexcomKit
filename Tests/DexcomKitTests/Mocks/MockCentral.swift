@@ -49,7 +49,11 @@ final class MockCentral: CentralManaging, @unchecked Sendable {
 
     func events() -> AsyncStream<BluetoothEvent> {
         let (stream, continuation) = AsyncStream<BluetoothEvent>.makeStream()
-        lock.withLock { self.continuation = continuation }
+        lock.withLock {
+            // Match production behavior: a restart ends the previous stream.
+            self.continuation?.finish()
+            self.continuation = continuation
+        }
         return stream
     }
 

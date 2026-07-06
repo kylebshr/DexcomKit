@@ -26,9 +26,10 @@ enum G7UUID {
         G7Characteristic.allCases.first { self.uuid(for: $0) == uuid }
     }
 
-    /// Advertised name prefixes for the sensor family: G7 (`DXCM`),
-    /// Dexcom One+ (`DX02`), and Dexcom One (`DX01`).
-    static let namePrefixes = ["DXCM", "DX01", "DX02"]
+    /// Advertised name prefixes for the sensor family: G7 (`DXCM`) and
+    /// Dexcom One+ (`DX02`). The original Dexcom One (`DX01`) speaks the
+    /// G6 protocol and is deliberately excluded.
+    static let namePrefixes = ["DXCM", "DX02"]
 }
 
 /// The G7 CGM-service characteristics DexcomKit interacts with, abstracted

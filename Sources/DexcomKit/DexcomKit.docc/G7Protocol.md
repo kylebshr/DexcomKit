@@ -22,9 +22,12 @@ before subscribing to glucose data.
 | | |
 | --- | --- |
 | Advertised service | `FEBC` (16-bit) |
-| Name prefixes | `DXCM` (G7), `DX01` (Dexcom One), `DX02` (Dexcom One+) |
+| Name prefixes | `DXCM` (G7), `DX02` (Dexcom One+) |
 | Sensor discriminator | Last 2 characters of the name = tail of the pairing code |
 | Cadence | Advertises ~every 5 minutes when it has a reading; connection window lasts a few seconds; the sensor disconnects itself |
+
+The original Dexcom One (`DX01`) speaks the G6 protocol, not this one, and
+is deliberately not matched.
 
 ## GATT layout
 
@@ -37,7 +40,8 @@ CGM service `F8083532-849E-531C-C594-30F1F86A4EA5`:
 | Backfill | `F8083536-…` | Notifies historical readings as 9-byte records |
 
 Subscription order: authentication first; on an authenticated+bonded status,
-backfill then control.
+control; backfill is enabled during glucose handling — matching the
+G7SensorKit reference order.
 
 ## Control messages
 
@@ -83,15 +87,20 @@ activation date is derived as `now − messageTimestamp`.
 
 | Offset | Field |
 | --- | --- |
-| `[2..<6]` | Session length, seconds (10-day and 15-day sensors exist) |
+| `[2..<6]` | Session length, seconds — **includes the grace period** |
 | `[6..<8]` | Warmup length, seconds (~1620) |
 | `[8..<12]` | Algorithm version |
 | `[12]` | Hardware version |
 | `[13..<15]` | Maximum lifetime, days |
 
-DexcomKit requests this once per session after the first reading and prefers
-its values over the built-in defaults (27-minute warmup, 10-day session,
-12-hour grace period).
+The reported session length already contains the 12-hour grace period: a
+real 10-day sensor reports 907 200 s (10.5 days) and a 15-day sensor
+1 339 200 s (15.5 days). Expiration is the reported length minus the grace
+period; the grace period ends when the reported length elapses.
+
+DexcomKit requests this after the first reading of each connection until the
+sensor answers, persists the response, and prefers its values over the
+built-in defaults (27-minute warmup, 10-day session, 12-hour grace period).
 
 ## Connection loop
 

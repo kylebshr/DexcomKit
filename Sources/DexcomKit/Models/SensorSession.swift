@@ -66,23 +66,40 @@ public struct SensorSession: Sendable, Hashable, Codable {
 extension SensorSession {
     /// Builds a session from an activation date and, when available, the
     /// sensor's own reported parameters.
-    init(sensorName: String, activationDate: Date, extendedVersion: ExtendedVersionMessage?) {
-        let warmup =
-            extendedVersion.map { TimeInterval($0.warmupLength) } ?? Self.defaultWarmupDuration
-        let length =
-            extendedVersion.map { TimeInterval($0.sessionLength) } ?? Self.defaultSessionLength
-        let expiration = activationDate.addingTimeInterval(length)
-        let graceEnd =
-            extendedVersion.map {
-                activationDate.addingTimeInterval(TimeInterval($0.maxLifetimeDays) * 24 * 60 * 60)
-            } ?? expiration.addingTimeInterval(Self.defaultGracePeriod)
+    ///
+    /// The sensor's reported session length *includes* the grace period:
+    /// a real 10-day sensor reports 907 200 s (10.5 days). Expiration is
+    /// therefore the reported length minus the 12-hour grace period, and
+    /// the grace period ends when the reported length elapses — matching
+    /// how G7SensorKit derives these dates.
+    init(
+        sensorName: String,
+        activationDate: Date,
+        sessionLength: TimeInterval?,
+        warmupLength: TimeInterval?,
+        algorithmVersion: UInt32?
+    ) {
+        let warmup = warmupLength ?? Self.defaultWarmupDuration
+        let totalLength = sessionLength ?? (Self.defaultSessionLength + Self.defaultGracePeriod)
+        let expiration = activationDate.addingTimeInterval(
+            max(totalLength - Self.defaultGracePeriod, 0))
 
         self.init(
             sensorName: sensorName,
             activationDate: activationDate,
             warmupEndDate: activationDate.addingTimeInterval(warmup),
             expirationDate: expiration,
-            gracePeriodEndDate: graceEnd,
+            gracePeriodEndDate: activationDate.addingTimeInterval(totalLength),
+            algorithmVersion: algorithmVersion
+        )
+    }
+
+    init(sensorName: String, activationDate: Date, extendedVersion: ExtendedVersionMessage?) {
+        self.init(
+            sensorName: sensorName,
+            activationDate: activationDate,
+            sessionLength: extendedVersion.map { TimeInterval($0.sessionLength) },
+            warmupLength: extendedVersion.map { TimeInterval($0.warmupLength) },
             algorithmVersion: extendedVersion?.algorithmVersion
         )
     }

@@ -18,12 +18,16 @@ public enum TrendArrow: String, Sendable, Hashable, Codable, CaseIterable {
 
     /// Buckets a rate of change in mg/dL per minute; `nil` when the sensor
     /// reported no trend.
+    ///
+    /// Boundaries match the Dexcom/G7SensorKit semantics: the falling
+    /// buckets are inclusive (a rate of exactly −3.0 is falling quickly),
+    /// the rising side is exclusive.
     public init?(rate: Double?) {
         guard let rate else { return nil }
         switch rate {
-        case ..<(-3): self = .fallingQuickly
-        case ..<(-2): self = .falling
-        case ..<(-1): self = .fallingSlightly
+        case ...(-3): self = .fallingQuickly
+        case ...(-2): self = .falling
+        case ...(-1): self = .fallingSlightly
         case ..<1: self = .steady
         case ..<2: self = .risingSlightly
         case ..<3: self = .rising

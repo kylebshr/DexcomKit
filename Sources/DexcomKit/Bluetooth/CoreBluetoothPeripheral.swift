@@ -10,17 +10,21 @@ final class CoreBluetoothPeripheral: PeripheralLink, @unchecked Sendable {
     let peripheral: CBPeripheral
     private let queue: DispatchQueue
 
+    /// Cached at creation: `CBPeer.identifier` is immutable, so this is safe
+    /// to read from any isolation domain without a queue hop.
+    let identifier: UUID
+
     init(peripheral: CBPeripheral, queue: DispatchQueue) {
         self.peripheral = peripheral
         self.queue = queue
-    }
-
-    var identifier: UUID {
-        peripheral.identifier
+        self.identifier = peripheral.identifier
     }
 
     var name: String? {
-        peripheral.name
+        // `CBPeripheral.name` is mutable state the CoreBluetooth stack
+        // updates on the serial queue (e.g. after GAP name resolution), so
+        // reads must hop onto the queue too.
+        queue.sync { peripheral.name }
     }
 
     var isConnected: Bool {

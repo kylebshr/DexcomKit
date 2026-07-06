@@ -52,14 +52,26 @@ import Testing
         await driveToConnected(
             central: central, engine: engine, peripheral: peripheral, iterator: &iterator)
 
-        #expect(central.calls.contains(.start))
-        #expect(central.calls.contains(.scanForSensors))
-        #expect(central.calls.contains(.stopScan))
-        #expect(central.calls.contains(.connect(peripheral.identifier)))
+        // Exactly one connection, scan stopped before connecting.
+        let centralCalls = central.calls
+        #expect(centralCalls.contains(.start))
+        #expect(central.calls(matching: .connect(peripheral.identifier)) == 1)
+        let scanStop = try #require(centralCalls.firstIndex(of: .stopScan))
+        let connect = try #require(centralCalls.firstIndex(of: .connect(peripheral.identifier)))
+        #expect(scanStop < connect)
+
+        // Subscription order: authentication first, control only after the
+        // auth status confirms a session, backfill not until first glucose.
+        let peripheralCalls = peripheral.calls
+        #expect(peripheral.calls(matching: .setNotify(true, .authentication)) == 1)
+        #expect(peripheral.calls(matching: .setNotify(true, .control)) == 1)
+        #expect(peripheral.calls(matching: .setNotify(true, .backfill)) == 0)
+        let authNotify = try #require(
+            peripheralCalls.firstIndex(of: .setNotify(true, .authentication)))
+        let controlNotify = try #require(
+            peripheralCalls.firstIndex(of: .setNotify(true, .control)))
+        #expect(authNotify < controlNotify)
         #expect(peripheral.calls.contains(.discoverG7Services))
-        #expect(peripheral.calls.contains(.setNotify(true, .authentication)))
-        #expect(peripheral.calls.contains(.setNotify(true, .backfill)))
-        #expect(peripheral.calls.contains(.setNotify(true, .control)))
 
         central.emit(
             .value(peripheral.identifier, characteristic: .control, data: G7Fixtures.glucose))
@@ -78,6 +90,9 @@ import Testing
         #expect(reading?.date == fixedNow.addingTimeInterval(-6))
 
         #expect(peripheral.calls.contains(.write(ExtendedVersionMessage.request, .control)))
+        // Backfill subscription happens on the first reading, matching the
+        // G7SensorKit reference order.
+        #expect(peripheral.calls(matching: .setNotify(true, .backfill)) == 1)
 
         let followed = store.loadFollowedSensor()
         #expect(followed?.name == "DXCM8T")
@@ -325,6 +340,7 @@ import Testing
 
         // The pending connect completes when the sensor comes into range.
         central.emit(.connected(peripheral.identifier))
+        #expect(await nextConnectionState(&iterator) == .connecting)
         central.emit(.servicesReady(peripheral.identifier, success: true))
         #expect(await nextConnectionState(&iterator) == .authenticating)
     }
@@ -342,7 +358,10 @@ import Testing
         var iterator = await engine.eventStream().makeAsyncIterator()
         await engine.start()
 
+        // willRestoreState arrives before poweredOn; the engine defers all
+        // action until the central is ready.
         central.emit(.willRestore(peripherals: [peripheral]))
+        central.emit(.stateChanged(.poweredOn))
         #expect(await nextConnectionState(&iterator) == .connecting)
         #expect(peripheral.calls.contains(.discoverG7Services))
         #expect(central.calls(matching: .connect(peripheral.identifier)) == 0)

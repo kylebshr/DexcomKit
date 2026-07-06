@@ -9,11 +9,12 @@ import Testing
 
     @Test(arguments: [
         (rate: -3.5, arrow: TrendArrow.fallingQuickly),
-        (rate: -3.0, arrow: .falling),
+        (rate: -3.0, arrow: .fallingQuickly),  // falling boundaries are inclusive
         (rate: -2.5, arrow: .falling),
-        (rate: -2.0, arrow: .fallingSlightly),
+        (rate: -2.0, arrow: .falling),
         (rate: -1.5, arrow: .fallingSlightly),
-        (rate: -1.0, arrow: .steady),
+        (rate: -1.0, arrow: .fallingSlightly),
+        (rate: -0.9, arrow: .steady),
         (rate: 0.0, arrow: .steady),
         (rate: 0.9, arrow: .steady),
         (rate: 1.0, arrow: .risingSlightly),

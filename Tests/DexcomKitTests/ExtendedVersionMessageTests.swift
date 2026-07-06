@@ -6,7 +6,7 @@ import Testing
 @Suite struct ExtendedVersionMessageTests {
     @Test func parsesTenDaySensor() throws {
         let message = try #require(ExtendedVersionMessage(data: G7Fixtures.extendedVersion10Day))
-        #expect(message.sessionLength == 864_000)  // 10 days
+        #expect(message.sessionLength == 907_200)  // 10.5 days, grace included
         #expect(message.warmupLength == 1620)  // 27 minutes
         #expect(message.algorithmVersion == 0x0001_0203)
         #expect(message.hardwareVersion == 1)
@@ -15,14 +15,14 @@ import Testing
 
     @Test func parsesFifteenDaySensor() throws {
         let message = try #require(ExtendedVersionMessage(data: G7Fixtures.extendedVersion15Day))
-        #expect(message.sessionLength == 1_296_000)  // 15 days
+        #expect(message.sessionLength == 1_339_200)  // 15.5 days, grace included
         #expect(message.maxLifetimeDays == 17)
     }
 
     @Test func parsesSliceWithNonZeroStartIndex() throws {
         let message = try #require(
             ExtendedVersionMessage(data: G7Fixtures.extendedVersion10Day.resliced))
-        #expect(message.sessionLength == 864_000)
+        #expect(message.sessionLength == 907_200)
     }
 
     @Test func rejectsShortData() {

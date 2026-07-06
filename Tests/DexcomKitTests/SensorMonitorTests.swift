@@ -32,7 +32,10 @@ import Testing
         return value
     }
 
-    /// Polls until the condition holds, failing the test on timeout.
+    struct TimeoutError: Error {}
+
+    /// Polls until the condition holds; records and throws on timeout so
+    /// the test fails fast instead of cascading through later waits.
     func waitUntil(
         _ comment: Comment,
         _ condition: @MainActor () -> Bool
@@ -42,6 +45,21 @@ import Testing
             try await Task.sleep(for: .milliseconds(1))
         }
         Issue.record("Timed out waiting for \(comment)")
+        throw TimeoutError()
+    }
+
+    /// Waits until the engine's broadcaster has the expected number of
+    /// consumers (the monitor's mirror plus any pump streams), so events
+    /// emitted afterwards are guaranteed to reach every stream.
+    func waitForSubscribers(
+        _ count: Int, of monitor: G7SensorMonitor
+    ) async throws {
+        for _ in 0..<2000 {
+            if await monitor.engine.eventSubscriberCount() >= count { return }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        Issue.record("Timed out waiting for \(count) event subscribers")
+        throw TimeoutError()
     }
 
     /// Drives the mock through an authenticated connection.
@@ -99,8 +117,9 @@ import Testing
             }
             return collected
         }
-        // Let the stream subscribe before events flow.
-        try await Task.sleep(for: .milliseconds(10))
+        // The monitor's mirror plus the readings pump must both be
+        // subscribed before events flow.
+        try await waitForSubscribers(2, of: monitor)
 
         let peripheral = MockPeripheral(name: "DXCM8T")
         try await driveToConnected(central: central, peripheral: peripheral)
@@ -137,7 +156,8 @@ import Testing
         }
         let first = collectReadings()
         let second = collectReadings()
-        try await Task.sleep(for: .milliseconds(10))
+        // Mirror + two event pumps.
+        try await waitForSubscribers(3, of: monitor)
 
         let peripheral = MockPeripheral(name: "DXCM8T")
         try await driveToConnected(central: central, peripheral: peripheral)

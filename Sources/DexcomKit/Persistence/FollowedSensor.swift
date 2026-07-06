@@ -14,6 +14,21 @@ struct FollowedSensor: Sendable, Hashable, Codable {
 
     /// When the sensor was activated.
     var activationDate: Date
+
+    /// Whether this sensor's session has ended. Persisted so that after a
+    /// relaunch a replacement sensor can be adopted and the session end
+    /// isn't re-announced.
+    var sessionEnded: Bool = false
+
+    /// Session length in seconds (includes the grace period) from the
+    /// sensor's extended version message, once received.
+    var sessionLength: UInt32?
+
+    /// Warmup length in seconds from the extended version message.
+    var warmupLength: UInt16?
+
+    /// Algorithm version from the extended version message.
+    var algorithmVersion: UInt32?
 }
 
 extension DexcomKitStore {

@@ -246,6 +246,11 @@ final class CoreBluetoothCentral: CentralManaging, @unchecked Sendable {
     }
 
     private func yield(_ event: BluetoothEvent) {
-        lock.withLock { continuation }?.yield(event)
+        // Yield while holding the lock so a concurrent events() call (an
+        // engine restart) can't finish-and-swap the continuation between
+        // the read and the yield, silently dropping the event.
+        lock.withLock {
+            continuation?.yield(event)
+        }
     }
 }

@@ -89,6 +89,11 @@ Task {
 }
 ```
 
+> Note: Readings are deduplicated within a run, but after an app relaunch
+> the sensor's current reading can be delivered again. If you persist
+> readings, dedupe by ``GlucoseReading/id`` — it is stable for a given
+> reading across launches.
+
 ## Live Activities
 
 Drive Live Activity updates from ``G7SensorMonitor/readings()`` — each

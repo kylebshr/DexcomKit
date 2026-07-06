@@ -45,9 +45,15 @@ public final class G7SensorMonitor {
     public private(set) var session: SensorSession?
 
     @ObservationIgnored private let configuration: G7Configuration
-    @ObservationIgnored private let engine: G7SessionEngine
+    @ObservationIgnored let engine: G7SessionEngine
     @ObservationIgnored private var mirrorTask: Task<Void, Never>?
+    @ObservationIgnored private var commandChain: Task<Void, Never>?
     @ObservationIgnored private var isStarted = false
+
+    /// How many events a consumer stream buffers before the oldest are
+    /// dropped — protection against a held-but-never-iterated stream growing
+    /// without bound over a weeks-long session.
+    private static let streamBufferLimit = 256
 
     /// Creates a monitor backed by CoreBluetooth.
     public convenience init(configuration: G7Configuration = G7Configuration()) {
@@ -65,8 +71,19 @@ public final class G7SensorMonitor {
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.configuration = configuration
-        self.engine = G7SessionEngine(
+        let engine = G7SessionEngine(
             configuration: configuration, central: central, sleep: sleep, now: now)
+        self.engine = engine
+
+        // Mirror engine events into snapshot state for the monitor's whole
+        // lifetime. Self is only held strongly per event, so an abandoned
+        // monitor can deinit.
+        mirrorTask = Task { [weak self] in
+            for await event in await engine.eventStream() {
+                guard let self else { return }
+                self.apply(event)
+            }
+        }
     }
 
     deinit {
@@ -86,22 +103,15 @@ public final class G7SensorMonitor {
         guard !isStarted else { return }
         isStarted = true
 
-        if mirrorTask == nil {
-            // Subscribe before starting the engine so the initial events
-            // (like a resumed session) aren't missed. Self is only held
-            // strongly per event, so an abandoned monitor can deinit.
-            let engine = engine
-            mirrorTask = Task { [weak self] in
-                let events = await engine.eventStream()
-                await engine.start()
-                for await event in events {
-                    guard let self else { return }
-                    self.apply(event)
-                }
+        enqueue { [engine, weak self] in
+            await engine.start()
+            // Refresh snapshots in case the mirror subscribed after the
+            // engine's initial events.
+            guard let self else { return }
+            self.connectionState = await engine.currentConnectionState
+            if let session = await engine.currentSession {
+                self.session = session
             }
-        } else {
-            let engine = engine
-            Task { await engine.start() }
         }
     }
 
@@ -110,8 +120,11 @@ public final class G7SensorMonitor {
     public func stop() {
         guard isStarted else { return }
         isStarted = false
-        let engine = engine
-        Task { await engine.stop() }
+        enqueue { [engine, weak self] in
+            await engine.stop()
+            guard let self else { return }
+            self.connectionState = await engine.currentConnectionState
+        }
     }
 
     /// Forgets the followed sensor so the next scan adopts fresh — for
@@ -119,17 +132,24 @@ public final class G7SensorMonitor {
     public func forgetSensor() {
         latestReading = nil
         session = nil
-        let engine = engine
-        Task { await engine.forgetSensor() }
+        enqueue { [engine, weak self] in
+            await engine.forgetSensor()
+            guard let self else { return }
+            self.session = await engine.currentSession
+            self.latestReading = nil
+        }
     }
 
     /// A new independent stream of everything the monitor reports, in order.
     ///
     /// Streams deliver only future events; read the snapshot properties for
     /// current state. Iteration ends when the consumer's task is cancelled.
+    /// A stream that is held but not iterated buffers at most the newest
+    /// 256 events.
     public func events() -> AsyncStream<G7Event> {
         let engine = engine
-        let (stream, continuation) = AsyncStream<G7Event>.makeStream()
+        let (stream, continuation) = AsyncStream<G7Event>.makeStream(
+            bufferingPolicy: .bufferingNewest(Self.streamBufferLimit))
         let pump = Task {
             for await event in await engine.eventStream() {
                 continuation.yield(event)
@@ -144,7 +164,8 @@ public final class G7SensorMonitor {
     /// backfilled, with backfill batches flattened in timestamp order.
     public func readings() -> AsyncStream<GlucoseReading> {
         let engine = engine
-        let (stream, continuation) = AsyncStream<GlucoseReading>.makeStream()
+        let (stream, continuation) = AsyncStream<GlucoseReading>.makeStream(
+            bufferingPolicy: .bufferingNewest(Self.streamBufferLimit))
         let pump = Task {
             for await event in await engine.eventStream() {
                 switch event {
@@ -162,6 +183,17 @@ public final class G7SensorMonitor {
         }
         continuation.onTermination = { _ in pump.cancel() }
         return stream
+    }
+
+    /// Serializes engine commands: unstructured tasks have no ordering
+    /// guarantee, so start/stop/forget each await their predecessor,
+    /// guaranteeing engine calls happen in the order the app made them.
+    private func enqueue(_ operation: @escaping @MainActor () async -> Void) {
+        let previous = commandChain
+        commandChain = Task { @MainActor in
+            await previous?.value
+            await operation()
+        }
     }
 
     private func apply(_ event: G7Event) {
