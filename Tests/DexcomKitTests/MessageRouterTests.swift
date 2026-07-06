@@ -57,34 +57,12 @@ import Testing
         #expect(MessageRouter.route(Data(), from: .authentication) == .malformed(opcode: nil))
     }
 
-    @Test func splitsBackfillChunksIntoRecords() {
-        let single = MessageRouter.route(G7Fixtures.backfillRecord, from: .backfill)
-        guard case .backfillRecords(let records) = single else {
-            Issue.record("expected records")
-            return
-        }
-        #expect(records.count == 1)
-
-        let double = MessageRouter.route(
-            backfillRecordBytes(timestamp: 299_700) + backfillRecordBytes(timestamp: 300_000),
-            from: .backfill)
-        guard case .backfillRecords(let two) = double else {
-            Issue.record("expected records")
-            return
-        }
-        #expect(two.map(\.timestamp) == [299_700, 300_000])
-    }
-
-    @Test func dropsTrailingPartialBackfillBytes() {
-        let routed = MessageRouter.route(
-            backfillRecordBytes(timestamp: 299_700) + Data([0x01, 0x02]), from: .backfill)
-        guard case .backfillRecords(let records) = routed else {
-            Issue.record("expected records")
-            return
-        }
-        #expect(records.count == 1)
-
-        let tooShort = MessageRouter.route(Data([0x01, 0x02, 0x03]), from: .backfill)
-        #expect(tooShort == .backfillRecords([]))
+    @Test func backfillDataPassesThroughRaw() {
+        // Backfill is a byte stream whose records may straddle notification
+        // boundaries; the router passes it through untouched for the
+        // assembler to reassemble.
+        let chunk = backfillRecordBytes(timestamp: 299_700) + Data([0x01, 0x02])
+        #expect(MessageRouter.route(chunk, from: .backfill) == .backfillData(chunk))
+        #expect(MessageRouter.route(Data(), from: .backfill) == .backfillData(Data()))
     }
 }

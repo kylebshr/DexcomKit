@@ -24,6 +24,10 @@ actor G7SessionEngine {
     /// engine concludes the followed session has probably ended.
     static let maxAuthStrikes = 3
 
+    /// How far past the session's elapsed time a backfill record's timestamp
+    /// may reach before it's considered corrupt and dropped.
+    static let backfillTimestampTolerance: TimeInterval = 10 * 60
+
     private let configuration: G7Configuration
     private let central: any CentralManaging
     private let broadcaster = EventBroadcaster<G7Event>()
@@ -352,10 +356,12 @@ actor G7SessionEngine {
         case .sessionStopped:
             Log.session.info("Sensor reported session stop")
             await reportSessionEnd(.stopped)
-        case .backfillRecords(let records):
+        case .backfillData(let data):
             guard configuration.backfillEnabled else { return }
-            Log.backfill.debug("Buffered \(records.count, privacy: .public) backfill records")
-            backfill.append(records)
+            Log.backfill.debug(
+                "Buffered \(data.count, privacy: .public) backfill bytes (\(self.backfill.count, privacy: .public) records so far)"
+            )
+            backfill.append(data)
         case .unrecognized(let opcode):
             Log.messages.debug(
                 "Unrecognized opcode \(opcode.map(String.init) ?? "none", privacy: .public) on \(String(describing: characteristic), privacy: .public)"
@@ -491,7 +497,29 @@ actor G7SessionEngine {
             return
         }
         guard !backfill.isEmpty else { return }
-        let readings = backfill.flush()
+
+        if backfill.pendingByteCount > 0 {
+            Log.backfill.error(
+                "Backfill stream ended with \(self.backfill.pendingByteCount, privacy: .public) dangling bytes"
+            )
+        }
+
+        // Backfilled readings are by definition from the past: a record whose
+        // timestamp exceeds the session's elapsed time is corrupt (a small
+        // allowance covers clock drift since activation was anchored).
+        let elapsed = now().timeIntervalSince(followed.activationDate)
+        let records = backfill.flush()
+        let valid = records.filter {
+            TimeInterval($0.timestamp) <= elapsed + Self.backfillTimestampTolerance
+        }
+        if valid.count != records.count {
+            Log.backfill.error(
+                "Dropped \(records.count - valid.count, privacy: .public) corrupt backfill records with timestamps beyond the session's \(Int(elapsed), privacy: .public)s elapsed"
+            )
+        }
+
+        let readings =
+            valid
             .map {
                 GlucoseReading(
                     record: $0, sensorName: followed.name,

@@ -7,7 +7,10 @@ enum RoutedMessage: Sendable, Equatable {
     case extendedVersion(ExtendedVersionMessage)
     case backfillFinished
     case sessionStopped
-    case backfillRecords([BackfillRecord])
+    /// Bytes from the backfill stream, delivered raw: records may straddle
+    /// notification boundaries, so ``BackfillAssembler`` reassembles and
+    /// parses the stream.
+    case backfillData(Data)
     /// An opcode this package doesn't handle.
     case unrecognized(opcode: UInt8?)
     /// A known opcode whose payload failed to parse.
@@ -48,18 +51,7 @@ enum MessageRouter {
             }
 
         case .backfill:
-            // Backfill notifications carry one or more consecutive 9-byte
-            // records; trailing bytes that don't form a full record are
-            // dropped.
-            var records: [BackfillRecord] = []
-            var remaining = data[...]
-            while remaining.count >= BackfillRecord.byteCount {
-                if let record = BackfillRecord(data: remaining.prefix(BackfillRecord.byteCount)) {
-                    records.append(record)
-                }
-                remaining = remaining.dropFirst(BackfillRecord.byteCount)
-            }
-            return .backfillRecords(records)
+            return .backfillData(data)
         }
     }
 }
