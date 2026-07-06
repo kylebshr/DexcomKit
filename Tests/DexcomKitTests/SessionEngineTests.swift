@@ -3,7 +3,7 @@ import Testing
 
 @testable import DexcomKit
 
-@Suite struct SessionEngineTests {
+@Suite(.timeLimit(.minutes(1))) struct SessionEngineTests {
     let fixedNow = Date(timeIntervalSince1970: 1_750_300_000)
 
     func makeHarness(

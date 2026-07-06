@@ -3,7 +3,7 @@ import Testing
 
 @testable import DexcomKit
 
-@Suite struct ReconnectTests {
+@Suite(.timeLimit(.minutes(1))) struct ReconnectTests {
     let fixedNow = Date(timeIntervalSince1970: 1_750_300_000)
 
     func makeEngine(
@@ -94,17 +94,20 @@ import Testing
             central.emit(.servicesReady(peripheral.identifier, success: true))
             #expect(await nextConnectionState(&iterator) == .authenticating)
             central.emit(.disconnected(peripheral.identifier, isRemoteInitiated: true))
-            #expect(await nextConnectionState(&iterator) == .waitingForReading)
 
             if attempt < G7SessionEngine.maxAuthStrikes {
+                #expect(await nextConnectionState(&iterator) == .waitingForReading)
                 #expect(await nextConnectionState(&iterator) == .scanning)
+            } else {
+                // The final strike emits the session end; awaiting it first
+                // avoids the state-matching helper consuming it while
+                // skipping to the state change.
+                let end = await nextEvent(&iterator) {
+                    if case .sessionEnded(let reason) = $0 { reason } else { nil }
+                }
+                #expect(end == .suspectedEnd)
             }
         }
-
-        let end = await nextEvent(&iterator) {
-            if case .sessionEnded(let reason) = $0 { reason } else { nil }
-        }
-        #expect(end == .suspectedEnd)
     }
 
     @Test func authenticatedConnectionResetsStrikes() async throws {

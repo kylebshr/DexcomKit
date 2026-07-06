@@ -3,7 +3,7 @@ import Testing
 
 @testable import DexcomKit
 
-@Suite struct EventBroadcasterTests {
+@Suite(.timeLimit(.minutes(1))) struct EventBroadcasterTests {
     @Test func everyConsumerReceivesEveryEvent() async {
         let broadcaster = EventBroadcaster<Int>()
         let first = await broadcaster.stream()

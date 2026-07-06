@@ -4,7 +4,7 @@ import Testing
 @testable import DexcomKit
 
 @MainActor
-@Suite struct SensorMonitorTests {
+@Suite(.timeLimit(.minutes(1))) struct SensorMonitorTests {
     let fixedNow = Date(timeIntervalSince1970: 1_750_300_000)
 
     func makeMonitor(
@@ -46,6 +46,9 @@ import Testing
 
     /// Drives the mock through an authenticated connection.
     func driveToConnected(central: MockCentral, peripheral: MockPeripheral) async throws {
+        // The monitor starts the engine asynchronously; events emitted
+        // before it attaches to the central would be dropped.
+        try await waitUntil("engine start") { central.calls.contains(.start) }
         central.emit(.stateChanged(.poweredOn))
         try await waitUntil("scan") { central.calls.contains(.scanForSensors) }
         central.emit(.discovered(peripheral: peripheral, name: peripheral.name, rssi: -60))
