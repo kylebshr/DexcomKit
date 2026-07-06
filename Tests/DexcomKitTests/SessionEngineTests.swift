@@ -203,6 +203,66 @@ import Testing
         #expect(backfill?.allSatisfy(\.isBackfilled) == true)
     }
 
+    @Test func backfillRecordsStraddlingNotificationsAreReassembled() async throws {
+        let (central, _, engine) = makeHarness()
+        var iterator = await engine.eventStream().makeAsyncIterator()
+        let peripheral = MockPeripheral(name: "DXCM8T")
+        await driveToConnected(
+            central: central, engine: engine, peripheral: peripheral, iterator: &iterator)
+
+        central.emit(
+            .value(peripheral.identifier, characteristic: .control, data: G7Fixtures.glucose))
+        #expect(await nextReading(&iterator) != nil)
+
+        // Three records MTU-packed into 20 + 7 byte notifications: the third
+        // record straddles the notification boundary, so per-notification
+        // parsing would corrupt or drop it.
+        let stream =
+            backfillRecordBytes(timestamp: 299_100)
+            + backfillRecordBytes(timestamp: 299_400)
+            + backfillRecordBytes(timestamp: 299_700)
+        central.emit(
+            .value(peripheral.identifier, characteristic: .backfill, data: stream.prefix(20)))
+        central.emit(
+            .value(peripheral.identifier, characteristic: .backfill, data: stream.suffix(7)))
+        central.emit(
+            .value(peripheral.identifier, characteristic: .control, data: Data([0x59])))
+
+        let backfill = await nextEvent(&iterator) {
+            if case .backfill(let readings) = $0 { readings } else { nil }
+        }
+        #expect(backfill?.map(\.timestampOffset) == [299_100, 299_400, 299_700])
+    }
+
+    @Test func corruptBackfillTimestampsAreDropped() async throws {
+        let (central, _, engine) = makeHarness()
+        var iterator = await engine.eventStream().makeAsyncIterator()
+        let peripheral = MockPeripheral(name: "DXCM8T")
+        await driveToConnected(
+            central: central, engine: engine, peripheral: peripheral, iterator: &iterator)
+
+        // Real-time reading anchors activation at fixedNow − 300 000 s, so
+        // the session has elapsed exactly 300 000 s.
+        central.emit(
+            .value(peripheral.identifier, characteristic: .control, data: G7Fixtures.glucose))
+        #expect(await nextReading(&iterator) != nil)
+
+        // A valid record plus one claiming a timestamp far beyond the
+        // session's elapsed time — the signature of a misparsed record.
+        // Backfill is by definition from the past, so it must be dropped.
+        let chunk =
+            backfillRecordBytes(timestamp: 299_400)
+            + backfillRecordBytes(timestamp: 8_388_608)
+        central.emit(.value(peripheral.identifier, characteristic: .backfill, data: chunk))
+        central.emit(
+            .value(peripheral.identifier, characteristic: .control, data: Data([0x59])))
+
+        let backfill = await nextEvent(&iterator) {
+            if case .backfill(let readings) = $0 { readings } else { nil }
+        }
+        #expect(backfill?.map(\.timestampOffset) == [299_400])
+    }
+
     @Test func backfillFlushesOnDisconnectWithoutFinishedMarker() async throws {
         let (central, _, engine) = makeHarness()
         var iterator = await engine.eventStream().makeAsyncIterator()
