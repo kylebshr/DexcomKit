@@ -270,7 +270,7 @@ import Testing
             central.emit(.servicesReady(peripheral.identifier, success: true))
             // A completed pending connect reports .connecting before service
             // discovery finishes.
-            let next = await nextEvent(&iterator) { event -> G7ConnectionState? in
+            let connectState = await nextEvent(&iterator) { event -> G7ConnectionState? in
                 if case .connectionStateChanged(let state) = event,
                     state == .connecting || state == .authenticating
                 {
@@ -278,10 +278,10 @@ import Testing
                 }
                 return nil
             }
-            if next == .connecting {
+            if connectState == .connecting {
                 #expect(await nextConnectionState(&iterator) == .authenticating)
             } else {
-                #expect(next == .authenticating)
+                #expect(connectState == .authenticating)
             }
             central.emit(
                 .value(peripheral.identifier, characteristic: .authentication, data: rejection))
