@@ -35,7 +35,7 @@ communities.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/kylebshr/DexcomKit.git", branch: "main")
+    .package(url: "https://github.com/kylebshr/DexcomKit.git", from: "0.1.0")
 ]
 ```
 
