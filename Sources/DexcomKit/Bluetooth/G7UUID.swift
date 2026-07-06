@@ -1,13 +1,18 @@
 import CoreBluetooth
 
 /// BLE identifiers for the G7 family, as documented by LoopKit/G7SensorKit.
+///
+/// `CBUUID` isn't declared `Sendable`, but it is an immutable value-like
+/// class, so sharing these constants across isolation domains is safe —
+/// hence `nonisolated(unsafe)`.
 enum G7UUID {
     /// The 16-bit service UUID the sensor advertises (`FEBC`); scanning
     /// filters on this.
-    static let advertisedService = CBUUID(string: "FEBC")
+    nonisolated(unsafe) static let advertisedService = CBUUID(string: "FEBC")
 
     /// The CGM service containing the characteristics DexcomKit uses.
-    static let cgmService = CBUUID(string: "F8083532-849E-531C-C594-30F1F86A4EA5")
+    nonisolated(unsafe) static let cgmService = CBUUID(
+        string: "F8083532-849E-531C-C594-30F1F86A4EA5")
 
     static func uuid(for characteristic: G7Characteristic) -> CBUUID {
         switch characteristic {
